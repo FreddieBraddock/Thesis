@@ -71,7 +71,7 @@ for (family_name in unique(fam.dt$family)) {
     print(nrow(family_dt))
 
 
-    # change format of gnomad_genome_AF and AF columns to non-scientific
+    # change format of gnomad_genome_AF and AF columns to numeric
     family_dt$gnomad_genome_AF <- as.numeric(family_dt$gnomad_genome_AF)
     family_dt$AF <- as.numeric(family_dt$AF)
 
