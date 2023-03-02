@@ -4,6 +4,10 @@ library("data.table")
 file_path <- "/mnt/data/fbraddock/familial_kc/snp/"
 
 # define the list of individuals in the family and those unaffected
+
+unaffected <- c("KC22", "BUA52")
+
+
 fam.list <- list("KC_family_1" = c("KC1", "KC2"), "KC_family_2" = c("KC3", "KC4", "KC5", "KC6"), 
                  "KC_family_3" = c("KC7", "KC8", "KC9", "KC10", "KC12"), "KC_family_6" = c("KC15", "KC16"), 
                  "KC_family_7" = c("KC17", "KC18"), "KC_family_8" = c("KC19", "KC20", "KC21"), 
@@ -14,9 +18,6 @@ fam.list <- list("KC_family_1" = c("KC1", "KC2"), "KC_family_2" = c("KC3", "KC4"
                  "KC_family_88" = c("BUA56", "KC55", "KC57"), "KC_family_325" = c("KC59", "KC61"), 
                  "KC_family_395" = c("BUA62", "KC63"))
 
-unaffected <- c("KC22", "BUA52")
-
-
 fam.list_excl_unaff <- lapply(fam.list, function(x) x[!(x %in% unaffected)])
 
 # Convert to data.table
@@ -25,15 +26,15 @@ fam.dt <- data.table(
   individual = unlist(fam.list)
 )
 
-# mark all individuals as affected
+# mark all individuals as affected 
 fam.dt[, status := "affected"]
 
 # mark KC22 and KC1 as unaffected
 fam.dt[individual %in% unaffected, status := "unaffected"]
 fam.dt
 
-# create a list to store the results for each family
-result_list <- list()
+#Data.frame for summary variant info
+number_variants_dt <- data.frame(Filtering = c("homo", "homo", "homo", "homo", "het", "het", "het", "het"), Func = c("Non-synonymous", "Synonymous", "Intronic", "Intergenic and other"))
 
 # loop through each unique family
 for (family_name in unique(fam.dt$family)) {
@@ -47,37 +48,45 @@ for (family_name in unique(fam.dt$family)) {
      if (nrow(family_dt) <1) {
         family_dt <- rbind(family_dt, individual_dt, fill=TRUE)
      }# thhis is because family_dt cannot merge with individual_dt on the first loop without any column names
-    family_dt <- merge(family_dt, individual_dt[,..xx], by="Chromosome_coordinates")
-  }
-  
+        family_dt <- merge(family_dt, individual_dt[,..xx], by="Chromosome_coordinates")
+    }
+
   # get the chromosomal coordinates of the unaffected individual
   unaffected_dt <- data.table()
   for (individual in unique(fam.dt[family == family_name & status == "unaffected", individual])) {
-    individual_dt <- fread(paste0(file_path, individual, ".GATK.snp.annovar.hg38_multianno.xls"))
-    individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],":",individual_dt[,POS],individual_dt[,REF],">",individual_dt[,ALT], sep="")
-    xx <- c('Chromosome_coordinates',individual)
-      if (nrow(unaffected_dt) <1) {
+        individual_dt <- fread(paste0(file_path, individual, ".GATK.snp.annovar.hg38_multianno.xls"))
+        individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],":",individual_dt[,POS],individual_dt[,REF],">",individual_dt[,ALT], sep="")
+        xx <- c('Chromosome_coordinates',individual)
+      if (nrow(unaffected_dt) < 1) {
         unaffected_dt <- rbind(unaffected_dt, individual_dt, fill=TRUE)
-     }
-    unaffected_dt <- merge(unaffected_dt, individual_dt[,..xx], by="Chromosome_coordinates")
-  }
-    print("Before removal unaffected")
-  print(nrow(family_dt))
-  # remove variants with the same chromosomal coordinates as those in the unaffected individual
-  unaffected_individuals <- unique(unaffected_dt$Chromosome_coordinates)
-  if (length(unaffected_individuals) > 0) {
+        }
+        unaffected_dt <- merge(unaffected_dt, individual_dt[,..xx], by="Chromosome_coordinates")
+    }
+
+    # remove variants with the same chromosomal coordinates as those in the unaffected individual
+    unaffected_individuals <- unique(unaffected_dt$Chromosome_coordinates)
+    if (length(unaffected_individuals) > 0) {
     family_dt <- family_dt[!Chromosome_coordinates %in% unaffected_individuals]
-  }
-  print("After removal unaffected")
-  print(nrow(family_dt))
+    }
 
-#Change gnomad_genome_AF to non scientific format 
-    as.numeric(format(family_dt[, AF], scientific = FALSE))
+   
+    # change format of gnomad_genome_AF and AF columns to numeric
+    family_dt$gnomad_genome_AF <- suppressWarnings({as.numeric(family_dt$gnomad_genome_AF)})
+    family_dt$AF <- suppressWarnings({as.numeric(family_dt$AF)})
 
- #Split into het 
+    #Convert "NA" (missing values) to "0"
+    family_dt$gnomad_genome_AF[is.na(family_dt$gnomad_genome_AF)] <- 0
+    family_dt$AF[is.na(family_dt$AF)] <- 0
+
+    #Data.frame for summary variant info
+    number_variants_dt <- data.frame(Filtering = c("homo", "homo", "homo", "homo", "het", "het", "het", "het"), Func = c("Non-synonymous", "Synonymous", "Intronic", "Intergenic and other"))
+
+    #Split into het 
     DFM2 <- family_dt[family_dt[, INFO] %like% "AC=1",]
     #Filter MAF<0.001
-    DFM3 <- DFM2[DFM2[, AF]< 0.001,]
+    DFM3 <- DFM2[as.numeric(DFM2[, AF])< 0.001,]
+    #Filter (gnomad_genome_AF) MAF<0.001
+    DFM3 <- DFM3[as.numeric(DFM3[, gnomad_genome_AF])< 0.001,]
     #filter exonicDFM4 <- DFM3[DFM3[Func == "exonic"]]
     DFM4 <- DFM3[DFM3[Func == "exonic"]]
     #split and Filter non-synonymous
@@ -91,8 +100,10 @@ for (family_name in unique(fam.dt$family)) {
     DFM8 <- DFM8[DFM8[Func != "exonic"]]
     #Split into homo 
     DFMhomo <- family_dt[family_dt[, INFO] %like% "AC=2",]
-    #Filter MAF<0.005
+    #Filter (AF) MAF<0.05
     DFM9 <- DFMhomo[DFMhomo[, AF]< 0.05,]
+    #Filter (gnomad_genome_AF) MAF<0.05
+    DFM9 <- DFM9[DFM9[, gnomad_genome_AF]< 0.05,]
     #filter exonic
     DFM10 <- DFM9[DFM9[Func == "exonic"]]
     #split and Filter non-synonymous
@@ -104,7 +115,22 @@ for (family_name in unique(fam.dt$family)) {
     #Filter all other rare variants (intergenic)
     DFM14 <- DFM9[DFM9[Func != "intronic"]]
     DFM14 <- DFM14[DFM14[Func != "exonic"]]
- export.loc <- "/mnt/data/fbraddock/familial_kc/snp/results/"
+
+
+    #The table column name is posting family_name istead of KCFam2
+    print("check5")
+    print(family_name)
+    family_number <- data.frame(
+        column_name = c(nrow(DFM11), nrow(DFM12), nrow(DFM13), 
+        nrow(DFM14), nrow(DFM5), nrow(DFM6), nrow(DFM7), nrow(DFM8)))
+
+        setnames(family_number, old = "column_name",  new = family_name)
+
+    number_variants_dt <- cbind(number_variants_dt, family_number)
+    print(number_variants_dt)
+    print("check6")
+
+    export.loc <- "/mnt/data/fbraddock/familial_kc/snp/results/"
     number.list <- list(1,2,3,4,5,6,7,8,9,10,11,12)
     dfm.list<- list(DFM3, DFM4, DFM5, DFM6, DFM7, DFM8, DFM9, DFM10, DFM11, DFM12, DFM13, DFM14)
     file.list<- c("het_rare", "het_exonic", "het_non-synonymous", "het_synonymous", "het_intronic", "het_intergenic&other","homo_rare", "homo_exonic", "homo_non-synonymous", "homo_synonymous", "homo_intronic", "homo_intergenic&other")
@@ -113,4 +139,5 @@ for (family_name in unique(fam.dt$family)) {
         write.csv(dfm.list[[n]], file=paste0(export.loc, family_name, "/", family_name,"_", file.list[[n]], "_snp.csv"), row.names=FALSE)
 
     }
-}
+    print("check7")
+    write.csv(number_variants_dt, file=paste0(export.loc, "summary_number_variants", ".csv"), row.names=TRUE)}
