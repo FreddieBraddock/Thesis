@@ -5,7 +5,7 @@ library(data.table)
 fam_location <- "/mnt/data/fbraddock/familial_kc/snp/results/"
 
 #Merge all families (recursive is to go inside of the directory you are in) (it looks for all the exonic files in the shared directory)
-fams <- list.files(fam_location, full.names = TRUE, recursive = TRUE, pattern = "rare_exonic_het_homo_snp.csv")
+fams <- list.files(fam_location, full.names = TRUE, recursive = TRUE, pattern = "het_homo_exonic_snv")
 
 #We need to know where the variatns come from which family (function(x) location divided up, we are extractng the family name)
 fam_names <- unlist(lapply(fams, function(x) {unlist(strsplit(x, "/"))[9]}))
