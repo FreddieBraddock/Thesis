@@ -30,7 +30,7 @@ cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2", "CHST6", "UBIAD1",
 #list of keratoconus associated genes (PMID: 35141241, Hao et al, 2021) +(Hardcastle lab)
 kc_genes <- unique(c("COL5A1", "MIR184", "LOX", "ZNF469", "VSX1", "COL4A3", "COL4A4", "COL5A1", "miR184", "LOX", "DOCK9", "IPO5", "SLC4A11", "SPARC", "STK24", "CAST", "IL1RN", "HKDC1", "IL17B", "PROB1", "SKP1", "ZNF469", "COL4A3", "VSX1", "COL4A4", "FLG", "TGFBI", "TIMP3", "SOD1", "GALNT14", "PCSK1", "PPIP5K2", "TSC1", "TUBA3D", "ADAMTS3", "BIRC2", "CD248", "COL6A2", "COL6A5", "FZD2", "LRP6", "MYOF", "PAK6", "PPP1R12A", "PPP3CC", "PTK6", "STX2", "VANGL1", "WNT1", "WNT16", "ZNF676", "ZNF765", "FNDC3B", "FOXO1", "HGF", "MPDZ-NFIB", "RAB3GAP1", "IMMP2L", "CSNK1E", "MAML2", "PNPLA2", "SMAD3", "STON2", "WNT10A", "ADAMTS9", "APEX1", "CAT", "FAS", "FASLG", "FEN1", "GPX1", "IL1A", "IL1B", "KCND3", "KIF26B", "LIG3", "MAP3K19", "MMP9", "POLG", "RAD51", "TF", "TIMP1", "TNF-α", "XRCC1", "WNT3", "WNT5A", "ATP1B1", "MRPS14", "CD46", "LRP1B", "FNDC3B", "ITGA2", "LOX", "TFAP2B", "COL12A1", "NDUFAF6", "ACTL7B", "COL5A1", "FBXW5", "EIF3A", "PIDD", "FAM76B", "GRIN2B", "GALNT6", "FOXO1", "KLF5", "TNFAIP8L3", "RORA", "SMAD3", "KIF1C", "ALDH3A1", "RAB11FIP4", "SKAP1", "COL1A1", "STK35", "NA", "COL6A1", "AIFM3"))
 
-#Create vector for GWAS associated Loci of interest
+#Create vector for Hardcastle GWAS associated Loci of interest
 loci_position = c("1q24.2", "1q25.1", "1p22.2", "2q22.1", "3q26.31", "5q11.2", "5q23.2", "6p12.3", "6q13", "8q22.1", "9p23", "9q31.3", "9q34.3", "10q21.1", "10q26.11", "11p15.5", "11q21", "12p13.1", "12q13.13", "13q14.11", "13q22.1", "15q21.2", "15q22.2", "15q22.33", "16q24.2", "17p13.2", "17p11.2", "17q21.32", "17q21.33", "20p13", "20q13.31", "21q21.3", "21q22.3", "22q11.21")
 
 
@@ -50,28 +50,7 @@ fam.dt
 
 #Data.frame for summary variant info
 number_variants_dt <- data.frame(Filtering = c("homo", "homo", "homo", "homo", "het", "het", "het", "het"), Func = c("Non-synonymous", "Synonymous", "Intronic", "Intergenic and other"))
-
-
-#read_in_data <- function(d) {
-  #paste("freddie", d)
-#}
-
-#t <- read_in_data("bagel")
-
-#Read in data
-#read_in_data <- function(i){
-##fread(paste0(file_path, i, ".GATK.snp.annovar.hg38_multianno.xls"))
-##}
-
-#r <- read_in_data(unique(fam.dt[family == family_name & status != "unaffected", individual]))
-
-#
-
-
-
-
-
-
+  
 # loop through each unique family
 for (family_name in unique(fam.dt$family)) {
   # subset the data.table to only include the current family
@@ -112,8 +91,6 @@ for (family_name in unique(fam.dt$family)) {
   family_dt$gnomad_genome_AF[is.na(family_dt$gnomad_genome_AF)] <- 0
   family_dt$AF[is.na(family_dt$AF)] <- 0
 
-  #Data.frame for summary variant info
-  number_variants_dt <- data.frame(Filtering = c("homo", "homo", "homo", "homo", "het", "het", "het", "het"), Func = c("Non-synonymous", "Synonymous", "Intronic", "Intergenic and other"))
   
   #Split into het 
   DFM2 <- family_dt[family_dt[, INFO] %like% "AC=1",]
@@ -158,29 +135,11 @@ for (family_name in unique(fam.dt$family)) {
   #Filter all other rare variants (intergenic)
   DFM14 <- DFM9[DFM9[Func != "intronic"]]
   DFM14 <- DFM14[DFM14[Func != "exonic"]]
-  #Filter for variants in genomic corneal dystrophy genes
-  DFM_homo_cd <- DFM11[GeneName %in% cd_genes]
-  #Filter for variants in KC genes
-  DFM_homo_kc <- DFM11[GeneName %in% kc_genes]#Filter for variants in genomic region flagged in KC
-  DFM_homo_GWASloci <- DFM11[cytoBand %in% loci_position]
-  #Create data.frame with top candidates with most inportant columns
-  columns <- c("Chromosome_coordinates", "ID", "GeneName", "cytoBand", "Func", "ExonicFunc", "gnomad_genome_AF", "SIFT_score", "SIFT_pred", "Polyphen2_HVAR_score", "Polyphen2_HVAR_pred", "CADD_Phred", "INFO")
-  
-  het_candidates <- merge(DFM_het_cd, DFM_het_kc[,..xx], by= "Chromosome_coordinates")
-  het_candidates <- merge(het_candidates, DFM_het_GWASloci[,..xx], by= "Chromosome_coordinates")
-  het_candidates <- het_candidates[, .("Chromosome_coordinates", "ID", "GeneName", "cytoBand", "Func", "ExonicFunc", "gnomad_genome_AF", "SIFT_score", "SIFT_pred", "Polyphen2_HVAR_score", "Polyphen2_HVAR_pred", "CADD_Phred", "INFO")]
-  print(het_candidates)
-  homo_candidates <- merge(DFM_homo_cd, DFM_homo_kc[,..xx],  by= "Chromosome_coordinates")
-  homo_candidates <- merge(homo_candidates, DFM_homo_GWASloci[,..xx],  by= "Chromosome_coordinates")
-  homo_candidates <- homo_candidates[, .("Chromosome_coordinates", "ID", "GeneName", "cytoBand", "Func", "ExonicFunc", "gnomad_genome_AF", "SIFT_score", "SIFT_pred", "Polyphen2_HVAR_score", "Polyphen2_HVAR_pred", "CADD_Phred", "INFO")]
+
+  #Merge rare exonic het and homo
+  DFM15 <- rbind(DFM4, DFM10)
 
 
-  print("check5")
-  print(homo_candidates)
-  
-
-  print("check5")
-  print(homo_candidates)
   #Create temporary table to store variant number data + change column name to family name
   print(family_name)
   family_number <- data.frame(
@@ -192,20 +151,25 @@ for (family_name in unique(fam.dt$family)) {
 
   number_variants_dt <- cbind(number_variants_dt, family_number)
   print(number_variants_dt)
-  print("check6")
 
-    
-  number.list <- list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
-  dfm.list<- list(DFM3, DFM4, DFM5, DFM6, DFM7, DFM8, DFM_het_cd, DFM_het_kc, DFM_het_GWASloci, het_candidates, DFM9, DFM10, DFM11, DFM12, DFM13, DFM14, DFM_homo_cd, DFM_homo_kc, DFM_homo_GWASloci, homo_candidates)
-  file.list<- c("het_rare", "het_exonic", "het_non-synonymous", "het_synonymous", "het_intronic", "het_intergenic&other", "het_ns_cd","het_ns_kc", "GWAS_loci_het_ns_variants", "het_candidates", "homo_rare", "homo_exonic", "homo_non-synonymous", "homo_synonymous", "homo_intronic", "homo_intergenic&other", "homo_ns_cd"  "homo_ns_kc", "GWAS_loci_homo_ns_variants", "homo_candidates")
-}
+
+  number.list <- list(1,2,3,4,5,6,7,8,9,10,11,12,13)
+
+  dfm.list<- list(DFM3, DFM4, DFM5, DFM6, DFM7, DFM8, DFM9, DFM10, DFM11, DFM12, DFM13, DFM14, DFM15 )
+
+  file.list<- c("het_rare", "het_exonic", "het_non-synonymous", "het_synonymous", "het_intronic", "het_intergenic&other", "homo_rare", "homo_exonic", "homo_non-synonymous", "homo_synonymous", "homo_intronic", "homo_intergenic&other", "het_homo_exonic")
+
   for(n in number.list){
     print(n)
     write.csv(dfm.list[[n]], file=paste0(export.loc, family_name, "/", family_name,"_", file.list[[n]], "_snp.csv"), row.names=FALSE)
 
   }
 
-  print("check7")
+
   write.csv(number_variants_dt, file=paste0(export.loc, "summary_number_variants", ".csv"), row.names=TRUE)
 }
+
+
+
+
 
