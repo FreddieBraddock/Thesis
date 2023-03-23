@@ -34,16 +34,17 @@ for(fam in fam.list){
         ns_candidate <- ns_candidate[, .(Chromosome_coordinates, ID, GeneName, cytoBand, Func, ExonicFunc, gnomad_genome_AF, SIFT_score, SIFT_pred, Polyphen2_HVAR_score, Polyphen2_HVAR_pred, CADD_Phred, INFO)]
         ns_candidate <- ns_candidate[!duplicated(Chromosome_coordinates)]
         #modify for latex table
-        ns_candidate[, Chromosome_coordinates := gsub(">", "\\testgreater{}", Chromosome_coordinates)]
         ns_candidate[, INFO := substr(INFO, 4, 4)]
-        ns_candidate[, SIFT_score := paste(SIFT_score, SIFT_pred, sep = ", ")]
+        ns_candidate[, SIFT_score := paste(SIFT_score, SIFT_pred, sep = " ")]
         ns_candidate[, c("SIFT_pred") := NULL]
-        ns_candidate[, Polyphen2_HVAR_score := paste(Polyphen2_HVAR_score, Polyphen2_HVAR_pred, sep = ", ")]
+        ns_candidate[, Polyphen2_HVAR_score := paste(Polyphen2_HVAR_score, Polyphen2_HVAR_pred, sep = " ")]
         ns_candidate[, c("Polyphen2_HVAR_pred") := NULL]
-        setnames(ns_candidate, c("Chromosome coordinates (hg38)", "ID", "Gen", "Cytoband", "Func", "ExonicFunc", "gnomAD genome AF", "SIFT", "Polyphen2", "CADD", "Alelle count"))
+
+
+
+        setnames(ns_candidate, c("chromosome", "ID", "Gene", "Cytoband", "Func", "ExonicFunc", "AF", "SIFT", "Polyphen", "CADD", "Allele"))
         ns_candidate<- ns_candidate[CADD != '.']
         write.csv(ns_candidate, file=paste0(loc_ns, fam, "/", fam,"_", name, "_ns_candidate_snp.csv"), row.names=FALSE)
     }
 }
-
 
