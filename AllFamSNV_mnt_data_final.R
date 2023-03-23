@@ -57,7 +57,9 @@ for (family_name in unique(fam.dt$family)) {
   family_dt <- data.table()
   for (individual in unique(fam.dt[family == family_name & status != "unaffected", individual])) {
     individual_dt <- fread(paste0(file_path, individual, ".GATK.snp.annovar.hg38_multianno.xls"))
-    individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],":",individual_dt[,POS],individual_dt[,REF],">",individual_dt[,ALT], sep="")
+    individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],"-",individual_dt[,POS],"-", individual_dt[,REF],"-",individual_dt[,ALT], sep="")
+    individual_dt[, Chromosome_coordinates := substring(Chromosome_coordinates, 4)] 
+
     xx <- c('Chromosome_coordinates',individual)
      if (nrow(family_dt) <1) {
         family_dt <- rbind(family_dt, individual_dt, fill=TRUE)
@@ -65,18 +67,22 @@ for (family_name in unique(fam.dt$family)) {
         family_dt <- merge(family_dt, individual_dt[,..xx], by="Chromosome_coordinates")
   }
 
-  # get the chromosomal coordinates of the unaffected individual
+  # get the chromosomal coordinates of the unaffected individual and modify for consistency
   unaffected_dt <- data.table()
   for (individual in unique(fam.dt[family == family_name & status == "unaffected", individual])) {
         individual_dt <- fread(paste0(file_path, individual, ".GATK.snp.annovar.hg38_multianno.xls"))
-        individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],":",individual_dt[,POS],individual_dt[,REF],">",individual_dt[,ALT], sep="")
+        individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],"-",individual_dt[,POS], "-", individual_dt[,REF], "-", individual_dt[,ALT], sep="")
+        individual_dt[, Chromosome_coordinates := substring(Chromosome_coordinates, 4)] 
         xx <- c('Chromosome_coordinates',individual)
       if (nrow(unaffected_dt) < 1) {
         unaffected_dt <- rbind(unaffected_dt, individual_dt, fill=TRUE)
       }
       unaffected_dt <- merge(unaffected_dt, individual_dt[,..xx], by="Chromosome_coordinates")
   }
-  
+
+  test$Chromosome_coordinates <- paste(test[,CHROM],"-",test[,POS], "-", test[,REF], "-", test[,ALT], sep="")
+  test[, Chromosome_coordinates := substring(Chromosome_coordinates, 4)] 
+
   # remove variants with the same chromosomal coordinates as those in the unaffected individual
   unaffected_individuals <- unique(unaffected_dt$Chromosome_coordinates)
   if (length(unaffected_individuals) > 0) {
