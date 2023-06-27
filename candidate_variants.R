@@ -1,0 +1,68 @@
+library(data.table)
+
+fam.list <- list("KC_family_1", "KC_family_2", "KC_family_3", "KC_family_6", "KC_family_7", "KC_family_8", "KC_family_20", "KC_family_22", "KC_family_24", "KC_family_50", "KC_family_57", "KC_family_62", "KC_family_67", "KC_family_73", "KC_family_88", "KC_family_325", "KC_family_395")
+
+
+
+loc_ns <- "/home/fbraddock/NAS/WGS/Analysis/snv/results/"
+loc_shared_variants <- "/home/fbraddock/NAS/WGS/Analysis/snv/results/KC_Family_all/homo_het_shared_snv_genes.csv"
+
+#list of corneal dystrophy genes
+cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2", "CHST6", "UBIAD1", "DCN", "PIKFYVE", "KERA", "LUM", "DCN", "EPYC", "STS", "COL8A2", "ZEB1", "COL8A2", "SLC4A11", "ZNF469", "PRDM5", "CHRDL1", "TCF4", "OVOL2", "ZEB1", "GRHL2")
+
+#list of keratoconus associated genes (PMID: 35141241, Hao et al, 2021) +(Hardcastle lab)
+kc_genes <- unique(c("COL5A1", "MIR184", "LOX", "ZNF469", "VSX1", "COL4A3", "COL4A4", "COL5A1", "miR184", "LOX", "DOCK9", "IPO5", "SLC4A11", "SPARC", "STK24", "CAST", "IL1RN", "HKDC1", "IL17B", "PROB1", "SKP1", "ZNF469", "COL4A3", "VSX1", "COL4A4", "FLG", "TGFBI", "TIMP3", "SOD1", "GALNT14", "PCSK1", "PPIP5K2", "TSC1", "TUBA3D", "ADAMTS3", "BIRC2", "CD248", "COL6A2", "COL6A5", "FZD2", "LRP6", "MYOF", "PAK6", "PPP1R12A", "PPP3CC", "PTK6", "STX2", "VANGL1", "WNT1", "WNT16", "ZNF676", "ZNF765", "FNDC3B", "FOXO1", "HGF", "MPDZ-NFIB", "RAB3GAP1", "IMMP2L", "CSNK1E", "MAML2", "PNPLA2", "SMAD3", "STON2", "WNT10A", "ADAMTS9", "APEX1", "CAT", "FAS", "FASLG", "FEN1", "GPX1", "IL1A", "IL1B", "KCND3", "KIF26B", "LIG3", "MAP3K19", "MMP9", "POLG", "RAD51", "TF", "TIMP1", "TNF-α", "XRCC1", "WNT3", "WNT5A", "ATP1B1", "MRPS14", "CD46", "LRP1B", "FNDC3B", "ITGA2", "LOX", "TFAP2B", "COL12A1", "NDUFAF6", "ACTL7B", "COL5A1", "FBXW5", "EIF3A", "PIDD", "FAM76B", "GRIN2B", "GALNT6", "FOXO1", "KLF5", "TNFAIP8L3", "RORA", "SMAD3", "KIF1C", "ALDH3A1", "RAB11FIP4", "SKAP1", "COL1A1", "STK35", "NA", "COL6A1", "AIFM3"))
+
+#Create vector for Hardcastle GWAS associated Loci of interest
+loci_position = c("1q24.2", "1q25.1", "1p22.2", "2q22.1", "3q26.31", "5q11.2", "5q23.2", "6p12.3", "6q13", "8q22.1", "9p23", "9q31.3", "9q34.3", "10q21.1", "10q26.11", "11p15.5", "11q21", "12p13.1", "12q13.13", "13q14.11", "13q22.1", "15q21.2", "15q22.2", "15q22.33", "16q24.2", "17p13.2", "17p11.2", "17q21.32", "17q21.33", "20p13", "20q13.31", "21q21.3", "21q22.3", "22q11.21")
+
+#Shared variant list 
+shared_genes <- fread(loc_shared_variants)
+shared_genes <- shared_genes$genes
+
+for(fam in fam.list){
+    het <- fread(paste0(loc_ns, fam, "/", fam, "_", "het_non-synonymous_snp.csv"))
+    homo <- fread(paste0(loc_ns, fam, "/", fam, "_", "homo_non-synonymous_snp.csv"))
+    candidate.list <- list("het"= het, "homo"=homo)
+    name.list <- list("het", "homo")
+    for(name in name.list){
+        can <- candidate.list[[name]]
+        gene <- can[can$chromosome_coordinates %in% c(cd_genes, kc_genes)]
+        loci <- can[can$cytoBand %in% loci_position]
+        fam_shared <- can[can$GeneName %in% shared_genes]
+        ns_candidate <- rbindlist(list(gene, loci, fam_shared), fill = TRUE)
+        ns_candidate <- ns_candidate[, .(Chromosome_coordinates, ID, GeneName, cytoBand, Func, ExonicFunc, gnomad_genome_AF, SIFT_score, SIFT_pred, Polyphen2_HVAR_score, Polyphen2_HVAR_pred, CADD_Phred, INFO)]
+        ns_candidate <- ns_candidate[!duplicated(Chromosome_coordinates)]
+         # Add new column indicating SNV presence in KC, CD, shared genes, or KC GWAS loci
+        ns_candidate[, relevance := ""]
+    
+        # Check if SNV is present in KC genes
+        ns_candidate[GeneName %in% kc_genes, relevance := paste(relevance, "K", sep = "|")]
+    
+        # Check if SNV is present in CD genes
+        ns_candidate[GeneName %in% cd_genes, relevance := paste(relevance, "C", sep = "|")]
+    
+        # Check if SNV is present in shared genes
+        ns_candidate[GeneName %in% shared_genes, relevance := paste(relevance, "S", sep = "|")]
+    
+        # Check if SNV is present in KC GWAS loci
+        ns_candidate[cytoBand %in% loci_position, relevance := paste(relevance, "G", sep = "|")]
+    
+        # Modify the values in the relevance column by removing leading comma ("|")
+# Modify the values in the relevance column by removing leading comma ("|")
+    ns_candidate[, relevance := substr(relevance, 2, nchar(relevance))]
+        #modify for latex table
+        ns_candidate[, INFO := substr(INFO, 4, 4)]
+        ns_candidate[, SIFT_score := paste(SIFT_score, SIFT_pred, sep = " ")]
+        ns_candidate[, c("SIFT_pred") := NULL]
+        ns_candidate[, Polyphen2_HVAR_score := paste(Polyphen2_HVAR_score, Polyphen2_HVAR_pred, sep = " ")]
+        ns_candidate[, c("Polyphen2_HVAR_pred") := NULL]
+
+
+
+        setnames(ns_candidate, c("Chromosome", "ID", "Gene", "Cytoband", "Func", "ExonicFunc", "AF", "SIFT", "Polyphen", "CADD", "Allele", "Relevance"))
+        ns_candidate<- ns_candidate[CADD != '.']
+        write.csv(ns_candidate, file=paste0(loc_ns, fam, "/", fam,"_", name, "_ns_candidate_snp.csv"), row.names=FALSE)
+    }
+}
+
