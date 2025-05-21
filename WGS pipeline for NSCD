@@ -1,1 +1,301 @@
+library("data.table")
 
+#INDEL
+
+# define the file path where the variant files are located
+loc_ns <- "/media/pontikos_nas2/WGS/Novogene_C204HW19011037/Primary_analysis_result/INDEL/Annotation/"
+
+# define the path where files will be saved
+export.loc <- "/media/pontikos_nas2/FreddieBraddock/schnyder_corneal_dystrophy/INDEL_analysis/"
+
+
+fam.list <- list("SCD" = c("OT", "KS", "MS", "OM"))
+unaffected <- list()
+
+fam.list_excl_unaff <- lapply(fam.list, function(x) x[!(x %in% unaffected)])
+
+
+#list of corneal dystrophy genes
+cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2", "CHST6", "UBIAD1", "DCN", "PIKFYVE", "KERA", "LUM", "DCN", "EPYC", "STS", "COL8A2", "ZEB1", "COL8A2", "SLC4A11", "ZNF469", "PRDM5", "CHRDL1", "TCF4", "OVOL2", "ZEB1", "GRHL2")
+
+
+final_dt <- data.table()
+fam.list <- list("OT", "KS", "MS", "OM")
+
+for (fam in fam.list) {
+  het <- fread(paste0(loc_ns, fam, ".GATK.indel.annovar.hg19_multianno.xls.gz"))
+  
+  # Special handling for "OT" individual
+  if (fam == "OT") {
+    het$CHROM <- gsub("chr", "", as.character(het$CHROM))
+  }
+  
+  het$Chromosome_coordinates <- paste(het[, CHROM], "-", het[, POS], "-", het[, REF], "-", het[, ALT], sep = "")
+  xx <- c('Chromosome_coordinates', fam)
+  
+  if (nrow(final_dt) < 1) {
+    final_dt <- rbind(final_dt, het, fill = TRUE)
+  }
+  
+  final_dt <- merge(final_dt, het[, ..xx], by = "Chromosome_coordinates")
+}
+
+
+
+# change format of gnomad_genome_AF and AF columns to numeric
+ # final_dt$gnomad_genome_AF <- suppressWarnings({as.numeric(final_dt$gnomad_genome_AF)})
+# final_dt$AF <- suppressWarnings({as.numeric(final_dt$AF)})
+
+  #Convert "NA" (missing values) to "0"
+  final_dt$"genomAD_genome_AF"[is.na(final_dt$"genomAD_genome_AF")] <- 0
+
+
+ #Split into het 
+  DFM2 <- final_dt[final_dt[, INFO] %like% "AC=1",]
+  #Filter MAF<0.001
+  DFM3 <- DFM2[DFM2$"genomAD_genome_AF"< 0.001,]
+
+  #filter exonicDFM4 <- DFM3[DFM3[Func == "exonic"]]
+  DFM4 <- DFM3[Func == "exonic"]
+    #Split the CADD column as it has two numbers
+  DFM4[, CADD_second := as.numeric(sapply(strsplit(CADD, ","), function(x) x[2]))]
+  #Filter for CADD > 10
+  DFM_CADD_indel <- DFM4[DFM4$"CADD_second">10]
+  #split and Filter out frameshift deletion
+  DFM5 <- DFM4[ExonicFunc != "frameshift deletion"]
+ 
+  # filter for frameshift deletion
+  DFM6 <- DFM4[ExonicFunc == "frameshift deletion"]
+  
+  #Filter intronic variants
+  DFM7 <- DFM3[Func == "intronic"]
+  #Filter all other rare variants (intergenic)
+  DFM8 <- DFM3[Func != "intronic"]
+  DFM8 <- DFM8[Func != "exonic"]
+  
+  
+  #Filter for variants in genomic corneal dystrophy genes throughout the whole genome
+  DFM_WG_het_cd <- DFM3[GeneName %in% cd_genes]
+
+  #Filter for variants in genomic corneal dystrophy genes
+  DFM_exonic_het_cd <- DFM4[GeneName %in% cd_genes]
+
+
+
+  
+    #Split into homo 
+  DFMhomo <- final_dt[final_dt[, INFO] %like% "AC=2",]
+  #Filter (AF) MAF<0.05
+  DFM9 <- DFMhomo[DFMhomo$"genomAD_genome_AF"< 0.05,]
+  #filter exonic
+  DFM10 <- DFM9[Func == "exonic"]
+  #Split the CADD column as it has two numbers
+  DFM10[, CADD_second := as.numeric(sapply(strsplit(CADD, ","), function(x) x[2]))]
+  #split and Filter out frameshift deletion
+  DFM11 <- DFM10[ExonicFunc != "frameshift deletion"]
+  # filter for frameshift deletion 
+  DFM12 <- DFM10[ExonicFunc == "frameshift deletion"]
+  #Filter intronic variants
+  DFM13 <- DFM9[Func == "intronic"]
+  #Filter all other rare variants (intergenic)
+  DFM14 <- DFM9[Func != "intronic"]
+  DFM14 <- DFM14[Func != "exonic"]
+
+ #Filter for variants in genomic corneal dystrophy genes
+  DFM_exonic_homo_cd <- DFM10[GeneName %in% cd_genes]
+
+  #Merge rare exonic het and homo
+  DFM15 <- rbind(DFM4, DFM10, fill=TRUE)
+
+ #Create temporary table to store variant number data + change column name to family name
+    family_number <- data.frame(
+    variant_count = c("Shared_variants", "Het_rare", "Exonic_rare_het", "Exonic_rare_het_CADD>10"),
+
+    indel = c(nrow(final_dt), nrow(DFM3), nrow(DFM4), nrow(DFM_CADD_indel))
+  )
+
+
+
+    number.list <- list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17)
+
+  dfm.list<- list(DFM_CADD_indel, DFM3, DFM4, DFM5, DFM6, DFM7, DFM8, DFM9, DFM10, DFM11, DFM12, DFM13, DFM14, DFM15, DFM_exonic_het_cd, DFM_exonic_homo_cd, DFM_WG_het_cd )
+
+  file.list<- c("exonic_rare_het_CADD<10", "het_rare", "het_exonic", "het_frameshift_deletion", "het_non_frameshift_deletion", "het_intronic", "het_intergenic&other", "homo_rare", "homo_exonic", "homo_frameshift_deletion", "homo_non_frameshift_deletion", "homo_intronic", "homo_intergenic&other", "het_homo_exonic", "het_exonic_cd", "homo_exonic_cd", "het_WG_cd")
+
+  for(n in number.list){
+    print(n)
+    write.csv(dfm.list[[n]], file=paste0(export.loc, file.list[[n]], "_indel.csv"), row.names=FALSE)
+
+  
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#SNV
+
+# define the file path where the variant files are located
+loc_ns <- "/media/pontikos_nas2/WGS/Novogene_C204HW19011037/Primary_analysis_result/SNP/Annotation/"
+
+# define the path where files will be saved
+export.loc <- "/media/pontikos_nas2/FreddieBraddock/schnyder_corneal_dystrophy/SNP_analysis/"
+
+
+fam.list <- list("SCD" = c("OT", "KS", "MS", "OM"))
+unaffected <- list()
+
+fam.list_excl_unaff <- lapply(fam.list, function(x) x[!(x %in% unaffected)])
+
+
+#list of corneal dystrophy genes
+cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2", "CHST6", "UBIAD1", "DCN", "PIKFYVE", "KERA", "LUM", "DCN", "EPYC", "STS", "COL8A2", "ZEB1", "COL8A2", "SLC4A11", "ZNF469", "PRDM5", "CHRDL1", "TCF4", "OVOL2", "ZEB1", "GRHL2")
+
+
+
+
+final_dt <- data.table()
+fam.list <- list("OT", "KS", "MS", "OM")
+
+for (fam in fam.list) {
+  het <- fread(paste0(loc_ns, fam, ".GATK.snp.annovar.hg19_multianno.xls.gz"))
+  
+  # Special handling for "OT" individual
+  if (fam == "OT") {
+    het$CHROM <- gsub("chr", "", as.character(het$CHROM))
+  }
+  
+  het$Chromosome_coordinates <- paste(het[, CHROM], "-", het[, POS], "-", het[, REF], "-", het[, ALT], sep = "")
+  xx <- c('Chromosome_coordinates', fam)
+  
+  if (nrow(final_dt) < 1) {
+    final_dt <- rbind(final_dt, het, fill = TRUE)
+  }
+  
+  final_dt <- merge(final_dt, het[, ..xx], by = "Chromosome_coordinates")
+}
+
+
+
+# change format of gnomad_genome_AF and AF columns to numeric
+ # final_dt$gnomad_genome_AF <- suppressWarnings({as.numeric(final_dt$gnomad_genome_AF)})
+# final_dt$AF <- suppressWarnings({as.numeric(final_dt$AF)})
+
+  #Convert "NA" (missing values) to "0"
+  final_dt$"genomAD_genome_AF"[is.na(final_dt$"genomAD_genome_AF")] <- 0
+
+
+  #Split into het 
+  DFM2 <- final_dt[final_dt[, INFO] %like% "AC=1",]
+  #Filter MAF<0.001
+  DFM3 <- DFM2[DFM2$"genomAD_genome_AF"< 0.001,]
+  DFM3 <- DFM3[DFM3$"1000g_ALL"< 0.001,]
+  #filter exonicDFM4 <- DFM3[DFM3[Func == "exonic"]]
+  DFM4 <- DFM3[Func == "exonic"]
+  #split and Filter non-synonymous
+  DFM5 <- DFM4[ExonicFunc != "synonymous SNV"]
+  #Split the CADD column as it has two numbers
+  DFM5[, CADD_second := as.numeric(sapply(strsplit(CADD, ","), function(x) x[2]))]
+  #Filter for CADD > 10
+  DFM_CADD_snp <- DFM5[DFM5$"CADD_second">10]
+  # filter for synonymous 
+  DFM6 <- DFM4[ExonicFunc == "synonymous SNV"]
+  #Filter intronic variants
+  DFM7 <- DFM3[Func == "intronic"]
+  #Filter all other rare variants (intergenic)
+  DFM8 <- DFM3[Func != "intronic"]
+  DFM8 <- DFM8[Func != "exonic"]
+
+  
+  #Filter for variants in genomic corneal dystrophy genes throughout the whole genome
+  DFM_WG_het_cd <- DFM3[GeneName %in% cd_genes]
+  #Filter for variants in genomic corneal dystrophy genes
+  DFM_het_cd <- DFM5[GeneName %in% cd_genes]
+
+
+  #Split into homo 
+  DFMhomo <- final_dt[final_dt[, INFO] %like% "AC=2",]
+  #Filter (AF) MAF<0.05
+  DFM9 <- DFMhomo[DFMhomo$"genomAD_genome_AF"< 0.05,]
+  #filter exonic
+  DFM10 <- DFM9[Func == "exonic"]
+  #split and Filter non-synonymous
+  DFM11 <- DFM10[ExonicFunc != "synonymous SNV"]
+  #Split the CADD column as it has two numbers
+  DFM11[, CADD_second := as.numeric(sapply(strsplit(CADD, ","), function(x) x[2]))]
+  #Filter for CADD > 10
+  DFM11 <- DFM11[DFM11$"CADD_second">10]
+  # filter for synonymous 
+  DFM12 <- DFM10[ExonicFunc == "synonymous SNV"]
+  #Filter intronic variants
+  DFM13 <- DFM9[Func == "intronic"]
+  #Filter all other rare variants (intergenic)
+  DFM14 <- DFM9[Func != "intronic"]
+  DFM14 <- DFM14[Func != "exonic"]
+
+  #Merge rare exonic het and homo
+  DFM15 <- rbind(DFM4, DFM10)
+
+  #Filter for variants in genomic corneal dystrophy genes
+  DFM_homo_cd <- DFM11[GeneName %in% cd_genes]
+
+
+
+
+
+ #Create temporary table to store variant number data + change column name to family name
+    number_variants_dt <- data.frame(
+
+    snv = c(nrow(final_dt), nrow(DFM3), nrow(DFM4), nrow(DFM_CADD_snp))
+  )
+  number_variants_dt <- cbind(family_number, number_variants_dt)
+#Add them together
+
+number_variants_dt$total <- number_variants_dt$indel + number_variants_dt$snv
+
+#Save files
+
+    number.list <- list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+
+  dfm.list<- list(DFM_CADD_snp, DFM3, DFM4, DFM5, DFM6, DFM7, DFM8, DFM9, DFM10, DFM11, DFM12, DFM13, DFM14, DFM15,  DFM_het_cd, DFM_homo_cd, number_variants_dt, DFM_WG_het_cd)
+
+  file.list<- c("het_exonic_rare_CADD>10", "het_rare", "het_exonic", "het_frameshift_deletion", "het_non_frameshift_deletion", "het_intronic", "het_intergenic&other", "homo_rare", "homo_exonic", "homo_frameshift_deletion", "homo_non_frameshift_deletion", "homo_intronic", "homo_intergenic&other", "het_homo_exonic", "het_exonic_cd", "homo_exonic_cd", "number_variants_dt", "het_WG_cd")
+
+  for(n in number.list){
+    print(n)
+    write.csv(dfm.list[[n]], file=paste0(export.loc, file.list[[n]], "_SNV.csv"), row.names=FALSE)
+
+  
+
+
+}
+
+
+#Candidate variants; joining het rare CADD>10 SNVs and indels into one file 
+candidatevariants <- rbind(DFM_CADD_indel, DFM_CADD_snp)
+
+#Save files
+
+    number.list <- list(1,2)
+
+  dfm.list<- list(candidatevariants, number_variants_dt)
+  file.list<- c("candidatevariants", "number_variatns_dt")
+  for(n in number.list){
+    print(n)
+    write.csv(dfm.list[[n]], file=paste0("/media/pontikos_nas2/FreddieBraddock/schnyder_corneal_dystrophy/candidate_variants/", file.list[[n]], "_indel_SNV.csv"), row.names=FALSE)
+
+  
+
+
+}
