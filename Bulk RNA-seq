@@ -1,1 +1,462 @@
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("DESeq2")
+BiocManager::install("tximport")
+BiocManager::install("EnsDb.Hsapiens.v75")
+
+BiocManager::install("TxDb.Hsapiens.UCSC.hg19.knownGene")
+
+BiocManager::install("AnnotationDbi")
+BiocManager::install("AnnotationFilter")
+
+BiocManager::install("ensembldb")
+BiocManager::install("GenomicFeatures")
+BiocManager::install("sva")
+BiocManager::install("clusterProfiler")
+BiocManager::install("tximport")
+
+library(DESeq2)
+library(tximport)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(AnnotationDbi)
+library(AnnotationFilter)
+library(ensembldb)
+library(GenomicFeatures)
+library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+library(EnsDb.Hsapiens.v75)
+library(httpgd)
+library(readr)
+library(sva)
+library(clusterProfiler)
+library(data.table)
+
+txdb <- EnsDb.Hsapiens.v75
+tx2gene <- transcripts(txdb, return.type = "DataFrame")
+tx2geneName <- genes(txdb, return.type = "DataFrame")
+k <- keys(txdb, keytype = "TXNAME")
+tx2gene <- select(txdb, k, "GENEID", "TXNAME")
+ 
+# Check the first few rows of tx2gene
+head(tx2gene)
+
+
+# Define sample names with "_R" removed
+sample_names <- c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
+                  "KCfamily62-NS-1021180-1", "KCfamily62-NS-1021180-2",
+                  "KCfamily62-NS-1021180-3", "KCfamily62-NS-1021180-4")
+
+# Generate file paths matching the correct directory structure
+file_paths <- paste0("/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/quants/",
+                     sample_names, "_R_quant/quant.sf")
+
+# Create sample table
+sampleTable <- data.frame(sampleName = sample_names, filePath = file_paths)
+
+# Use tximport with tx2gene and ignoreTxVersion option
+txi <- tximport(sampleTable$filePath, type = "salmon", tx2gene = tx2gene, ignoreTxVersion = TRUE)
+
+# Check the first few rows of the counts matrix
+head(txi$counts)
+
+# Assign the counts matrix to countMatrix
+countMatrix <- txi$counts
+
+
+# Define the new column names
+new_col_names <- c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
+                  "KCfamily62-NS-1021180-1", "KCfamily62-NS-1021180-2",
+                  "KCfamily62-NS-1021180-3", "KCfamily62-NS-1021180-4")
+
+# Set the column names of countMatrix to the new names
+colnames(countMatrix) <- new_col_names
+
+
+
+#Create a sample metadata table (replace 'metadata' with your actual metadata)
+# This table should contain columns like 'Sample', 'Condition', etc.
+
+metadata <- data.frame(
+  Sample = c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
+                  "KCfamily62-NS-1021180-1", "KCfamily62-NS-1021180-2",
+                  "KCfamily62-NS-1021180-3", "KCfamily62-NS-1021180-4"),
+  Condition = c("Control", "Control", "Control", "Control", "KC Affected", "KC Affected", "KC Affected", "KC Affected"),
+    Sex = c("f", "f", "f", "f", "m", "m", "m", "m"),
+    Ethnicity = c("?", "?", "?", "?", "White", "White", "White", "White")
+)
+
+
+
+# Round the count matrix to the nearest integer
+countMatrix <- round(countMatrix)
+
+#Data normalization and estimation of size factors
+dds <- DESeqDataSetFromMatrix(countData = countMatrix, colData = metadata, design = ~ Condition)
+dds <- DESeq(dds)
+
+#Differential expression analysis
+# You can compare KC affected vs. control groups
+#log 2​	(Expression in KC/Expression in control
+results <- results(dds, contrast=c("Condition","KC Affected", "Control"))
+results[results$GeneName == "COL4A1" ,]
+
+
+
+#Add geneNames 
+# 1. Convert Ensembl gene IDs in 'results' to gene names using 'tx2geneName'
+ensembl_gene_ids <- rownames(results)
+
+gene_names <- tx2geneName[match(ensembl_gene_ids, tx2geneName$gene_id), "gene_name"]
+
+# 2. Add gene names to 'results' as a new column
+results$GeneName <- gene_names
+
+#Add chromosome coordinates
+results_df <- as.data.frame(results)
+tx2geneName$GeneName <- tx2geneName$gene_name
+
+tx2geneName$entrezid <- sapply(tx2geneName$entrezid, function(x) {
+  if (is.null(x) || length(x) == 0) return(NA) 
+  else return(paste(x, collapse = ";"))  # Convert list to semicolon-separated string
+})
+
+merged_results <- merge(results_df, tx2geneName, by = "GeneName", all = TRUE)
+#Obtain gene within reagion of interest - annotate table with cytoband
+# Load necessary libraries
+library(data.table)
+
+# Define URL of the cytoband file
+cytoband_url <- "http://hgdownload.cse.ucsc.edu/goldenpath/hg38/database/cytoBand.txt.gz"
+
+# Read the cytoband file
+cytoband <- fread(cytoband_url, sep="\t", header=FALSE)
+
+# Assign column names
+colnames(cytoband) <- c("Chromosome", "Start", "End", "Cytoband", "Stain")
+
+# Preview the first rows of cytoband data
+head(cytoband)
+# Assuming cytoband is already a data.table
+setDT(cytoband)
+
+# Remove rows where Chromosome does not start with "chr1", "chr2", ..., "chrX"
+cytoband <- cytoband[grepl("^chr[0-9XY]+$", Chromosome)]
+merged_results <- merged_results[grepl("^[0-9XY]+$", merged_results$seq_name), ]
+# View the cleaned data
+head(cytoband)
+
+# Ensure chromosome format matches (e.g., remove 'chr' if needed)
+cytoband$Chromosome <- gsub("^chr", "", cytoband$Chromosome)
+
+# Now let's assume 'merged_results' is your dataframe that contains genes with their respective chromosome and start positions
+# We'll add a cytoband column to 'merged_results' based on the gene location
+
+
+
+#### GOT TO HERE, having issues with names of header but should be easy to get working now. 
+
+# Now let's find the corresponding cytoband for each gene
+merged_results$cytoband <- sapply(1:nrow(merged_results), function(i) {
+  chr <- merged_results[i, "seq_name"]  # Chromosome
+  start <- merged_results[i, "gene_seq_start"]
+  
+  # Find all cytobands where the gene falls within the range
+  matches <- cytoband[cytoband$Chromosome == chr & cytoband$Start <= start & cytoband$End >= start, "Cytoband"]
+  
+  # If multiple cytobands match, concatenate them into one string
+  if (length(matches) > 0) {
+    return(paste("chr", chr, paste(matches, collapse = ", "), sep = ""))
+  } else {
+    return(NA)
+  }
+})
+
+
+
+write.csv(merged_results, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/results.csv", row.names = FALSE)
+
+#import shared vaiants among affected
+candidate_regions <- fread("/media/pontikos_nas2/FreddieBraddock/WGS/Analysis/sep2024/KC_family_62b/KC_family_62b_quaternary_het_indel_snp.csv")
+
+#filter for overlap between candidate reagions and the transcriptomics. AKA which genes are present in the candidate reagions and merged results?? 
+filtered_resultsQ <- merged_results[merged_results$GeneName %in% candidate_regions$GeneName, ]
+filtered_resultsQ <- filtered_resultsQ[!is.na(filtered_resultsQ$padj), ]
+filtered_expression_resultsQ <- filtered_resultsQ[filtered_resultsQ$padj < 0.05, ]
+filtered_expression_resultsQ <- filtered_expression_resultsQ[abs(filtered_expression_resultsQ$log2FoldChange) > 1, ]
+
+write.csv(filtered_resultsQ, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/filtered_resultsQ.csv", row.names = FALSE)
+write.csv(filtered_expression_resultsQ, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/filtered_expression_resultsQ.csv", row.names = FALSE)
+
+#import shared vaiants among affected
+candidate_regions <- fread("/media/pontikos_nas2/FreddieBraddock/WGS/Analysis/sep2024/KC_family_62b/KC_family_62b_tertiary_het_indel_snp.csv")
+filtered_resultsT <- merged_results[merged_results$GeneName %in% candidate_regions$GeneName, ]
+filtered_resultsT <- filtered_resultsT[!is.na(filtered_resultsT$padj), ]
+filtered_resultsT <- filtered_resultsT[filtered_resultsT$padj < 0.05, ]
+write.csv(filtered_resultsT, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/filtered_resultsT.csv", row.names = FALSE)
+
+#PLot volcano plot
+
+hgd()
+
+# 1. Extract log2 fold change (LFC) and adjusted p-values
+LFC <- results$log2FoldChange
+padj <- results$padj
+
+# 2. Calculate -log10(adjusted p-values)
+log10_padj <- -log10(padj)
+
+# 3. Create the volcano plot
+# You can customize the plot according to your preference
+plot(LFC, log10_padj, pch = 16, cex = 0.7, col = ifelse(abs(LFC) > 1, ifelse(padj < 0.05, "red", "black"), "black"),
+     xlab = "Log2 Fold Change", ylab = "-log10(Adjusted p-value)",
+     main = "Volcano Plot", xlim = c(-25, 25))
+
+# Add horizontal dashed line at significance level (adjust as needed)
+abline(h = -log10(0.00001), lty = 2)
+
+# Add vertical dashed lines at LFC threshold (adjust as needed)
+abline(v = c(-1, 1), lty = 2)
+
+
+
+# Add gene labels for the top differentially expressed genes
+top_de_genes <- results[which(padj < 0.05 & abs(LFC) > 1), ]
+text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
+     labels = top_de_genes[, 7], pos = 4)
+
+
+
+
+#To get the top 50 genes with largest significant log fold
+
+# 1. Subset only significantly differentially expressed genes (FDR < 0.05)
+significant_results <- subset(merged_results, padj < 0.05)
+
+# 2. Sort by absolute log2 fold change in descending order
+significant_results <- significant_results[order(-abs(significant_results$log2FoldChange)), ]
+
+# 3. Select the top 50 genes with largest log2 fold change
+top_50_genes <- head(significant_results, 50)
+
+write.csv(significant_results, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/significant_results.csv", row.names = FALSE)
+# 4. Write the top 50 genes to a CSV file
+write.csv(top_50_genes, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/top_50_genes.csv", row.names = FALSE)
+
+
+#################################################_PLOT_RARE_VARIANTS_###################################################################
+
+# 1. Extract log2 fold change (LFC) and adjusted p-values
+LFC <- filtered_resultsQ$log2FoldChange
+padj <- filtered_resultsQ$padj
+
+# 2. Calculate -log10(adjusted p-values)
+log10_padj <- -log10(padj)
+
+# 3. Create the volcano plot
+# You can customize the plot according to your preference
+plot(LFC, log10_padj, pch = 16, cex = 0.7, col = ifelse(abs(LFC) > 1, ifelse(padj < 0.05, "red", "black"), "black"),
+     xlab = "Log2 Fold Change", ylab = "-log10(Adjusted p-value)",
+     main = "Volcano Plot", xlim = c(-5, 5))
+
+# Add horizontal dashed line at significance level (adjust as needed)
+abline(h = -log10(0.05), lty = 2)
+
+# Add vertical dashed lines at LFC threshold (adjust as needed)
+abline(v = c(-1, 1), lty = 2)
+
+top_de_genes <- filtered_resultsQ[which(padj < 0.05 & abs(LFC) > 1), ]
+text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
+     labels = top_de_genes$gene_name, pos = 4, cex = 0.7) 
+
+
+#Filter for haplotype regions 
+# Load your dataset (Ensure it contains a column for chromosome bands)
+df <- significant_results 
+df <- as.data.table(df)
+df2 <- merged_results 
+df2 <- as.data.table(df2)
+
+# Define the cytoband ranges to filter
+regions <- c("chr15q21.3", "chr15q22", "chr15q23", "chr15q24", "chr15q25", 
+             "chr13q32.1", "chr13q32.2", "chr13q32.3", "chr13q33", "chr13q34")
+
+# Use `grepl()` for partial matching to include all sub-bands (e.g., 13q33.3 will be included in 13q33)
+filtered_df <- df[grepl(paste(regions, collapse = "|"), cytoband)]
+filtered_df2 <- df2[grepl(paste(regions, collapse = "|"), cytoband)]
+
+# View filtered results
+print(filtered_df2)
+write.csv(filtered_df, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/significant_results_haplotypes.csv", row.names = FALSE)
+
+filtered_df3 <- filtered_df2
+# Change the class to "DESeqResults" and set the "package" attribute
+class(filtered_df3) <- c("DESeqResults", class(filtered_df3))  # Add "DESeqResults" as a class
+
+# Set the package attribute
+attr(filtered_df3, "package") <- "DESeq2"
+
+# 1. Extract log2 fold change (LFC) and adjusted p-values
+LFC <- filtered_df2$log2FoldChange
+padj <- filtered_df2$padj
+
+# 2. Calculate -log10(adjusted p-values)
+log10_padj <- -log10(padj)
+
+# 3. Create the volcano plot
+plot(LFC, log10_padj, pch = 16, cex = 0.7, 
+     col = ifelse(abs(LFC) > 1, ifelse(padj < 0.05, "red", "black"), "black"),
+     xlab = "Log2 Fold Change", ylab = "-log10(Adjusted p-value)",
+     main = "Volcano Plot", xlim = c(-5, 5))
+
+# Add horizontal dashed line at significance level (adjust as needed)
+abline(h = -log10(0.05), lty = 2)
+
+# Add vertical dashed lines at LFC threshold (adjust as needed)
+abline(v = c(-1, 1), lty = 2)
+
+
+# 4. Add gene labels for the top differentially expressed genes
+# Ensure column 16 contains the gene names or replace with the correct column name
+top_de_genes <- filtered_df3[which(padj < 0.05 & abs(LFC) > 1), ]
+text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
+     labels = top_de_genes$gene_name, pos = 4, cex = 0.7)  
+
+
+
+#PCA plot
+# Variance-stabilized transformation
+vsd <- vst(dds, blind = FALSE)
+
+# Extract the count matrix after VST transformation
+vst_data <- assay(vsd)
+
+# Transpose the data to have samples as columns and genes as rows (required for PCA)
+vst_data <- t(vst_data)
+
+# Check for constant or zero-variance columns
+zero_var_cols <- apply(vst_data, 2, var) == 0
+
+# Remove constant or zero-variance columns
+vst_data <- vst_data[, !zero_var_cols]
+
+# Check if any columns remain after removing constant or zero-variance columns
+if (ncol(vst_data) < 2) {
+  stop("Not enough samples after removing constant or zero-variance columns.")
+}
+
+# 6. Create multiple PCA plots for different combinations of principal components
+# Load the required library
+library("ggplot2")
+
+# Perform PCA
+pca <- prcomp(vst_data, scale = TRUE)
+
+# Create a data frame containing the PC scores and sample metadata
+pca_data <- data.frame(Sample = rownames(vst_data), Condition = metadata$Condition, Sex = metadata$Sex, Ethnicity = metadata$Ethnicity)
+
+# List of principal components for comparison (1 to 5 in this case)
+pcs <- 1:5
+
+# Loop through all combinations of principal components
+for (i in 1:(length(pcs) - 1)) {
+  for (j in (i + 1):length(pcs)) {
+    pc1_label <- paste("PC", pcs[i], sep = "")
+    pc2_label <- paste("PC", pcs[j], sep = "")
+    pca_data[, pc1_label] <- pca$x[, pcs[i]]
+    pca_data[, pc2_label] <- pca$x[, pcs[j]]
+
+    # Create the PCA plot with sample names as labels (labels in black color)
+    pca_plot <- ggplot(pca_data, aes_string(x = pc1_label, y = pc2_label, color = "Condition")) +
+      geom_point(size = 3) +
+      labs(title = paste("PCA Plot -", pc1_label, "vs.", pc2_label), x = pc1_label, y = pc2_label) +
+      theme_minimal()
+  
+    # Print and save the PCA plot
+    print(pca_plot)
+    ggsave(filename = paste("/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/PCA_Plot_", pc1_label, "_vs_", pc2_label, ".png", sep = ""), plot = pca_plot)
+  }
+}
+
+
+
+
+#p63 = TP63; GJA1 = CX43
+# Load required libraries
+library(DESeq2)
+library(reshape2)
+library(ggplot2)
+# Load required libraries
+library(DESeq2)
+library(reshape2)
+library(ggplot2)
+
+# Define genes of interest using gene symbols
+tf <- c("TP63", "PAX6", "KRT5", "KRT14", "KRT3", "GJA1")
+
+# Retrieve normalized counts
+norm_counts <- counts(dds, normalized=TRUE)
+
+# Ensure tx2geneName contains Ensembl IDs and gene symbols
+# Assumes tx2geneName has "gene_id" (Ensembl) and "gene_name" (Gene Symbol)
+gene_mapping <- tx2geneName[tx2geneName$gene_name %in% tf, ]
+
+# Extract Ensembl IDs
+ensembl_ids <- gene_mapping$gene_id
+
+# Subset normalized counts by Ensembl ID
+expr_subset <- norm_counts[rownames(norm_counts) %in% ensembl_ids, ]
+
+# Convert to data frame
+expr_subset_df <- as.data.frame(expr_subset)
+expr_subset_df$Gene <- rownames(expr_subset_df)  # Preserve row names as a column
+
+# Convert Ensembl IDs to gene names
+expr_subset_df$Gene <- gene_mapping$gene_name[match(expr_subset_df$Gene, gene_mapping$gene_id)]
+
+# Reshape data to long format
+expr_long <- melt(expr_subset_df, id.vars = "Gene", variable.name = "Sample", value.name = "Expression")
+
+# Convert sample names to character (fix factor issues)
+expr_long$Sample <- as.character(expr_long$Sample)
+metadata$Sample <- as.character(metadata$Sample)
+
+# Standardize sample names (remove spaces, lowercase)
+expr_long$Sample <- trimws(tolower(expr_long$Sample))
+metadata$Sample <- trimws(tolower(metadata$Sample))
+
+# Merge with metadata
+expr_long <- merge(expr_long, metadata, by="Sample", all.x=TRUE)
+
+# Check if merge was successful
+if (!"Condition" %in% colnames(expr_long)) {
+  stop("Error: 'Condition' column is missing in metadata. Check metadata file.")
+}
+
+# Function to plot boxplot for a single gene
+plot_single_gene <- function(gene_name) {
+  subset_data <- expr_long[expr_long$Gene == gene_name, ]
+  
+  ggplot(subset_data, aes(x=Condition, y=Expression, fill=Condition)) +
+    geom_boxplot() +
+    theme_minimal() +
+    labs(title=paste("Expression of", gene_name), x="Condition", y="Expression Level") +
+    theme(axis.text.x = element_text(angle=45, hjust=1)) +
+    scale_fill_brewer(palette="Set2")
+}
+
+# Generate and display individual plots
+plots <- lapply(tf, plot_single_gene)
+
+# Print and save all plots
+for (i in seq_along(tf)) {
+  gene_name <- tf[i]
+  p <- plots[[i]]
+  
+  # Display the plot
+  print(p)
+  
+  # Save each plot as a PNG file with the gene name in the filename
+  ggsave(filename = paste0("/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/", gene_name, "_Expression.png"), 
+         plot = p, width = 6, height = 4, dpi = 300)
+}
 
