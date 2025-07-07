@@ -1,97 +1,49 @@
 library("data.table")
 
 # define the file path where the variant files are located
-
 file_path <- "/home/fbraddock/nas/FreddieBraddock/WGS/Re-anno_final/"
 
 # define the path where files will be saved
 export.loc <- "/home/fbraddock/nas/FreddieBraddock/WGS/Analysis/sep2024/"
 
-# define the list of individuals in the family and those unaffected
-    #Update this list with KC individuals
+# define the unaffected individuals in the family 
 unaffected <- c("KC22", "BUA52", "BUA40")
 
-
 #List of KC families and their members
-#update
 fam.list <- list("KC_family_1" = c("KC1", "KC2"),
     "KC_family_2" = c("KC3", "KC5", "KC6"), #(sample mix up with KC7 and so is removed)
     "KC_family_2b" = c("KC3", "KC5"), #(sample mix up of KC4 with KC7 and so is removed) 
-   "KC_family_3" = c("KC7", "KC8", "KC9", "KC10", "KC12"),
+    "KC_family_3" = c("KC7", "KC8", "KC9", "KC10", "KC12"),
     "KC_family_3b" = c("KC7", "KC8", "KC9", "KC10"), #"KC12"),
-  "KC_family_6" = c("KC15", "KC16"),
+    "KC_family_6" = c("KC15", "KC16"),
     "KC_family_7" = c("KC17", "KC18"),
     "KC_family_8" = c("KC19", "KC20", "KC21"),
-   "KC_family_20" = c("KC22", "KC23", "KC24"),
-   "KC_family_22" = c("KC25", "KC26", "KC27"),
+    "KC_family_20" = c("KC22", "KC23", "KC24"),
+    "KC_family_22" = c("KC25", "KC26", "KC27"),
     "KC_family_24" = c("KC28", "KC29", "KC30"),
     "KC_family_50" = c("KC32", "KC33", "KC34", "KC35", "KC36"),
     "KC_family_57" = c("KC38", "KC39"),
-    "KC_family_62" = c(#"BUA40", 
-    "KC41", "BUA42", "KC43", "KC44",
-        "KC45"#, #"BUA46", "KC47", "KC48", 
-        #"KC64_RS"#, "KC65_ES", "KC66_AS"
-        ),
-     "KC_family_62b" = c(#"BUA40", 
-    "KC41", "BUA42", "KC43", "KC44",
-       "KC45", #"BUA46", #"KC47", "KC48", 
-       "KC64_RS"#, "KC65_ES", "KC66_AS"
-        ),
-         "KC_family_62c" = c("BUA40", 
-    "KC41", "BUA42", "KC43", "KC44",
-        "KC45", #"BUA46", #"KC47", "KC48", 
-        "KC64_RS"#, "KC65_ES", "KC66_AS"
-        ),
-        "KC_family_67" = c("KC49", "KC50"),
-    "KC_family_73" = c("BUA51", "BUA53", "BUA54"), #"BUA52" is iunaffected but may share hetozygous variants with children, should just be exclude for the anlysis and used in segrgeagtion ananlysis.
-   "KC_family_88" = c("BUA56", "KC55", "KC57"),
+    "KC_family_62" = c("KC41", "BUA42", "KC43", "KC44", "KC45"),
+    "KC_family_62b" = c("KC41", "BUA42", "KC43", "KC44", "KC45", "BUA46", "KC64_RS"),
+    "KC_family_62c" = c("BUA40", "KC41", "BUA42", "KC43", "KC44", "KC45", "KC48", "KC64_RS"),
+    "KC_family_67" = c("KC49", "KC50"),
+    "KC_family_73" = c("BUA51", "BUA53", "BUA54"), #"BUA52" is unaffected but may share hetozygous variants with children, should just be exclude for the anlysis and used in segrgeagtion ananlysis.
+    "KC_family_88" = c("BUA56", "KC55", "KC57"),
     "KC_family_325" = c("KC59", "KC61"),
-   "KC_family_395" = c("BUA62", "KC63")
+    "KC_family_395" = c("BUA62", "KC63")
   )
 
-#make a list of unaffected
+#make a list of unaffected individuals
 fam.list_excl_unaff <- lapply(fam.list, function(x) x[!(x %in% unaffected)])
 
+#Create vector of corneal dystrophy genes
+cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2", "CHST6", "UBIAD1", "DCN", "PIKFYVE", "KERA", "LUM", "DCN", "EPYC", "STS", "COL8A2", "ZEB1", "COL8A2", "SLC4A11", "ZNF469", "PRDM5", "CHRDL1", "TCF4", "OVOL2", "ZEB1", "GRHL2")
 
-#list of corneal dystrophy genes
-cd_genes <- c("TGFBI", "COL17A1", "KRT3", "KRT12", "TACSTD2",
-    "CHST6", "UBIAD1", "DCN", "PIKFYVE", "KERA", "LUM", "DCN",
-    "EPYC", "STS", "COL8A2", "ZEB1", "COL8A2", "SLC4A11", "ZNF469",
-    "PRDM5", "CHRDL1", "TCF4", "OVOL2", "ZEB1", "GRHL2"
-)
-
-#list of keratoconus associated genes (PMID: 35141241, Hao et al, 2021)+(Hardcastle lab) # nolint               #I think there is a recent review which shows all KC genes??
-kc_genes <- unique(c("COL5A1", "MIR184", "LOX", "ZNF469", "VSX1",
-    "COL4A3", "COL4A4", "COL5A1", "miR184", "LOX", "DOCK9", "IPO5",
-    "SLC4A11", "SPARC", "STK24", "CAST", "IL1RN", "HKDC1", "IL17B",
-    "PROB1", "SKP1", "ZNF469", "COL4A3", "VSX1", "COL4A4", "FLG", "TGFBI",
-    "TIMP3", "SOD1", "GALNT14", "PCSK1", "PPIP5K2", "TSC1", "TUBA3D",
-    "ADAMTS3", "BIRC2", "CD248", "COL6A2", "COL6A5", "FZD2", "LRP6",
-    "MYOF", "PAK6", "PPP1R12A", "PPP3CC", "PTK6", "STX2", "VANGL1",
-    "WNT1", "WNT16", "ZNF676", "ZNF765", "FNDC3B", "FOXO1", "HGF",
-    "MPDZ-NFIB", "RAB3GAP1", "IMMP2L", "CSNK1E", "MAML2", "PNPLA2",
-    "SMAD3", "STON2", "WNT10A", "ADAMTS9", "APEX1", "CAT", "FAS", "FASLG",
-    "FEN1", "GPX1", "IL1A", "IL1B", "KCND3", "KIF26B", "LIG3", "MAP3K19",
-    "MMP9", "POLG", "RAD51", "TF", "TIMP1", "TNF-α", "XRCC1", "WNT3", "WNT5A",
-    "ATP1B1", "MRPS14", "CD46", "LRP1B", "FNDC3B", "ITGA2", "LOX", "TFAP2B",
-    "COL12A1", "NDUFAF6", "ACTL7B", "COL5A1", "FBXW5", "EIF3A", "PIDD",
-    "FAM76B", "GRIN2B", "GALNT6", "FOXO1", "KLF5", "TNFAIP8L3", "RORA",
-    "SMAD3", "KIF1C", "ALDH3A1", "RAB11FIP4", "SKAP1", "COL1A1", "STK35",
-    "NA", "COL6A1", "AIFM3")
-)
+#Create vector of keratoconus associated genes (PMID: 35141241, Hao et al., 2021) + (PMID: 33649486, Hardcastle et al., 2021)
+kc_genes <- unique(c("COL5A1", "MIR184", "LOX", "ZNF469", "VSX1", "COL4A3", "COL4A4", "COL5A1", "miR184", "LOX", "DOCK9", "IPO5", "SLC4A11", "SPARC", "STK24", "CAST", "IL1RN", "HKDC1", "IL17B", "PROB1", "SKP1", "ZNF469", "COL4A3", "VSX1", "COL4A4", "FLG", "TGFBI", "TIMP3", "SOD1", "GALNT14", "PCSK1", "PPIP5K2", "TSC1", "TUBA3D", "ADAMTS3", "BIRC2", "CD248", "COL6A2", "COL6A5", "FZD2", "LRP6", "MYOF", "PAK6", "PPP1R12A", "PPP3CC", "PTK6", "STX2", "VANGL1", "WNT1", "WNT16", "ZNF676", "ZNF765", "FNDC3B", "FOXO1", "HGF", "MPDZ-NFIB", "RAB3GAP1", "IMMP2L", "CSNK1E", "MAML2", "PNPLA2",  "SMAD3", "STON2", "WNT10A", "ADAMTS9", "APEX1", "CAT", "FAS", "FASLG", "FEN1", "GPX1", "IL1A", "IL1B", "KCND3", "KIF26B", "LIG3", "MAP3K19", "MMP9", "POLG", "RAD51", "TF", "TIMP1", "TNF-α", "XRCC1", "WNT3", "WNT5A", "ATP1B1", "MRPS14", "CD46", "LRP1B", "FNDC3B", "ITGA2", "LOX", "TFAP2B", "COL12A1", "NDUFAF6", "ACTL7B", "COL5A1", "FBXW5", "EIF3A", "PIDD", "FAM76B", "GRIN2B", "GALNT6", "FOXO1", "KLF5", "TNFAIP8L3", "RORA", "SMAD3", "KIF1C", "ALDH3A1", "RAB11FIP4", "SKAP1", "COL1A1", "STK35", "NA", "COL6A1", "AIFM3"))
 
 #Create vector for Hardcastle GWAS associated Loci of interest
-loci_position <- c("1q24.2", "1q25.1", "1p22.2",
-    "2q22.1", "3q26.31", "5q11.2", "5q23.2", "6p12.3",
-    "6q13", "8q22.1", "9p23", "9q31.3", "9q34.3",
-    "10q21.1", "10q26.11", "11p15.5", "11q21",
-    "12p13.1", "12q13.13", "13q14.11", "13q22.1",
-    "15q21.2", "15q22.2", "15q22.33",
-    "16q24.2", "17p13.2", "17p11.2", "17q21.32",
-    "17q21.33", "20p13", "20q13.31", "21q21.3",
-    "21q22.3", "22q11.21"
-)
-
+loci_position <- c("1q24.2", "1q25.1", "1p22.2", "2q22.1", "3q26.31", "5q11.2", "5q23.2", "6p12.3", "6q13", "8q22.1", "9p23", "9q31.3", "9q34.3", "10q21.1", "10q26.11", "11p15.5", "11q21", "12p13.1", "12q13.13", "13q14.11", "13q22.1", "15q21.2", "15q22.2", "15q22.33", "16q24.2", "17p13.2", "17p11.2", "17q21.32", "17q21.33", "20p13", "20q13.31", "21q21.3", "21q22.3", "22q11.21")
 
 # Convert to data.table
 fam.dt <- data.table(
@@ -102,8 +54,7 @@ fam.dt <- data.table(
 #Mark all individuals as affected
 fam.dt[, status := "affected"]
 
-#Mark KC22 and KC1 as unaffected
-#UPDATE
+#Mark unaffected
 fam.dt[individual %in% unaffected, status := "unaffected"]
 fam.dt
 
@@ -120,24 +71,18 @@ for (family_name in unique(fam.dt$family)) {
     snp_dt <- fread(paste0(file_path, individual, "/", individual, ".GATK.snp.annovar.hg38_multianno.xls"))
     indel_dt <- fread(paste0(file_path, individual, "/", individual, ".GATK.indel.annovar.hg38_multianno.xls"))
     individual_dt <- rbind(snp_dt, indel_dt)
-    #Add fread indel file
-    #Add merge indel and snv file adn carry on (might be able to do it all in one code)
+    #Add merge indel and snv file and carry on (might be able to do it all in one code)
     individual_dt$Chromosome_coordinates <- paste(individual_dt[,CHROM],"-",individual_dt[,POS],"-", individual_dt[,REF],"-",individual_dt[,ALT], sep="")
     individual_dt[, Chromosome_coordinates := substring(Chromosome_coordinates, 4)] 
     individual_dt[, AC := gsub(".*AC=([^;]+);.*", "\\1", INFO)]
-
     xx <- c('Chromosome_coordinates', 'AC', individual)
-    
     if (nrow(family_dt) <1) {
         family_dt <- rbind(family_dt, individual_dt, fill=TRUE)
     }
-
-    # this is because family_dt cannot merge with individual_dt on the first loop without any column names
+    #USed as family_dt cannot merge with individual_dt on the first loop without any column names
     merge_columns <- c("Chromosome_coordinates", "AC")
     family_dt <- merge(family_dt, individual_dt[,..xx], by=merge_columns)
 }
-
-
 
 # get the chromosomal coordinates of the unaffected individual and modify for consistency
 unaffected_dt <- data.table()
@@ -168,31 +113,30 @@ for (individual in unique(fam.dt[family == family_name & status == "unaffected",
   family_dt$gnomad_genome_AF[is.na(family_dt$gnomad_genome_AF)] <- 0
   family_dt$AF[is.na(family_dt$AF)] <- 0
 
-  
-  #Split into het                                                           #CHnage this code so its like if AC = 1 then filter for AF <0.001 OR filter AF <0.005 It will save a lot of code
+  #Split into het                                
   DFM3 <- family_dt[
     #filter based on the value of AC
     (grepl("1", AC) & as.numeric(AF) < 0.001 & as.numeric(gnomad_genome_AF) < 0.001) |
     (grepl("2", AC) & as.numeric(AF) < 0.005 & as.numeric(gnomad_genome_AF) < 0.005)
   ]
 
-  #Filter for GWAS/KC/CD genes here
-  #Add collumn that states whether the variant is GWAS, CD, or KC
-  DFM_cd <- DFM3[GeneName %in% cd_genes]
-  #Filter for variants in KC genes
-  DFM_kc <- DFM3[GeneName %in% kc_genes]
-  #Filter for variants in genomic region flagged in KC
-  DFM_GWASloci <- DFM3[cytoBand %in% loci_position]                 #Merge the three files
+    #Filter for GWAS/KC/CD genes here
+    #Add collumn that states whether the variant is GWAS, CD, or KC   
+    DFM_cd <- DFM3[GeneName %in% cd_genes]
+    #Filter for variants in KC genes
+    DFM_kc <- DFM3[GeneName %in% kc_genes]
+    #Filter for variants in genomic region flagged in KC
+    DFM_GWASloci <- DFM3[cytoBand %in% loci_position]             
+    
     # Add a source column to each data frame
     DFM_cd$Source <- "DFM_cd"
     DFM_kc$Source <- "DFM_kc"
     DFM_GWASloci$Source <- "DFM_GWASloci"
 
-
-  # Combine all datasets into one
+    # Combine all datasets into one
     DFM_combined <- rbind(DFM_GWASloci, DFM_cd, DFM_kc)
 
-  # Keep all columns except 'Source' explicitly, then combine 'Source'
+  # Keep all columns and combine 'Source'
   DFM_combined <- DFM_combined[, c(
   .(Source = paste(unique(Source), collapse = ";")), # Combine 'Source'
   lapply(.SD, unique) # Take unique values of other columns
@@ -204,7 +148,7 @@ for (individual in unique(fam.dt[family == family_name & status == "unaffected",
   primary <- DFM_combined[Func == "exonic"]
   #Filter intronic variants
   secondary <- DFM_combined[Func == "intronic"]
-  #Filter all other rare variants (intergenic)                          #Can you merge them into one line
+  #Filter all other rare variants (intergenic)                          
     tertiary <- DFM_combined[!(Func %in% c("exonic", "intronic"))]
      for (individual in unique(fam.dt[family == family_name & status != "unaffected", individual])) {
         primary_het <- primary[grepl("1", AC)]
