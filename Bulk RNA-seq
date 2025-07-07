@@ -4,12 +4,9 @@ if (!require("BiocManager", quietly = TRUE))
 BiocManager::install("DESeq2")
 BiocManager::install("tximport")
 BiocManager::install("EnsDb.Hsapiens.v75")
-
 BiocManager::install("TxDb.Hsapiens.UCSC.hg19.knownGene")
-
 BiocManager::install("AnnotationDbi")
 BiocManager::install("AnnotationFilter")
-
 BiocManager::install("ensembldb")
 BiocManager::install("GenomicFeatures")
 BiocManager::install("sva")
@@ -40,7 +37,6 @@ tx2gene <- select(txdb, k, "GENEID", "TXNAME")
 # Check the first few rows of tx2gene
 head(tx2gene)
 
-
 # Define sample names with "_R" removed
 sample_names <- c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
                   "KCfamily62-NS-1021180-1", "KCfamily62-NS-1021180-2",
@@ -62,7 +58,6 @@ head(txi$counts)
 # Assign the counts matrix to countMatrix
 countMatrix <- txi$counts
 
-
 # Define the new column names
 new_col_names <- c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
                   "KCfamily62-NS-1021180-1", "KCfamily62-NS-1021180-2",
@@ -70,8 +65,6 @@ new_col_names <- c("HDF-1", "HDF-2", "HDF-3", "HDF-4",
 
 # Set the column names of countMatrix to the new names
 colnames(countMatrix) <- new_col_names
-
-
 
 #Create a sample metadata table (replace 'metadata' with your actual metadata)
 # This table should contain columns like 'Sample', 'Condition', etc.
@@ -85,8 +78,6 @@ metadata <- data.frame(
     Ethnicity = c("?", "?", "?", "?", "White", "White", "White", "White")
 )
 
-
-
 # Round the count matrix to the nearest integer
 countMatrix <- round(countMatrix)
 
@@ -99,8 +90,6 @@ dds <- DESeq(dds)
 #log 2​	(Expression in KC/Expression in control
 results <- results(dds, contrast=c("Condition","KC Affected", "Control"))
 results[results$GeneName == "COL4A1" ,]
-
-
 
 #Add geneNames 
 # 1. Convert Ensembl gene IDs in 'results' to gene names using 'tx2geneName'
@@ -150,11 +139,6 @@ cytoband$Chromosome <- gsub("^chr", "", cytoband$Chromosome)
 
 # Now let's assume 'merged_results' is your dataframe that contains genes with their respective chromosome and start positions
 # We'll add a cytoband column to 'merged_results' based on the gene location
-
-
-
-#### GOT TO HERE, having issues with names of header but should be easy to get working now. 
-
 # Now let's find the corresponding cytoband for each gene
 merged_results$cytoband <- sapply(1:nrow(merged_results), function(i) {
   chr <- merged_results[i, "seq_name"]  # Chromosome
@@ -170,8 +154,6 @@ merged_results$cytoband <- sapply(1:nrow(merged_results), function(i) {
     return(NA)
   }
 })
-
-
 
 write.csv(merged_results, file = "/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/results.csv", row.names = FALSE)
 
@@ -217,15 +199,10 @@ abline(h = -log10(0.00001), lty = 2)
 # Add vertical dashed lines at LFC threshold (adjust as needed)
 abline(v = c(-1, 1), lty = 2)
 
-
-
 # Add gene labels for the top differentially expressed genes
 top_de_genes <- results[which(padj < 0.05 & abs(LFC) > 1), ]
 text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
      labels = top_de_genes[, 7], pos = 4)
-
-
-
 
 #To get the top 50 genes with largest significant log fold
 
@@ -267,7 +244,6 @@ abline(v = c(-1, 1), lty = 2)
 top_de_genes <- filtered_resultsQ[which(padj < 0.05 & abs(LFC) > 1), ]
 text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
      labels = top_de_genes$gene_name, pos = 4, cex = 0.7) 
-
 
 #Filter for haplotype regions 
 # Load your dataset (Ensure it contains a column for chromosome bands)
@@ -321,8 +297,6 @@ top_de_genes <- filtered_df3[which(padj < 0.05 & abs(LFC) > 1), ]
 text(LFC[which(padj < 0.05 & abs(LFC) > 1)], log10_padj[which(padj < 0.05 & abs(LFC) > 1)],
      labels = top_de_genes$gene_name, pos = 4, cex = 0.7)  
 
-
-
 #PCA plot
 # Variance-stabilized transformation
 vsd <- vst(dds, blind = FALSE)
@@ -344,7 +318,7 @@ if (ncol(vst_data) < 2) {
   stop("Not enough samples after removing constant or zero-variance columns.")
 }
 
-# 6. Create multiple PCA plots for different combinations of principal components
+# Create multiple PCA plots for different combinations of principal components
 # Load the required library
 library("ggplot2")
 
@@ -376,9 +350,6 @@ for (i in 1:(length(pcs) - 1)) {
     ggsave(filename = paste("/media/pontikos_nas2/FreddieBraddock/Epithelial_differenciation_project/RNA-seq/40-1127878463/PCA_Plot_", pc1_label, "_vs_", pc2_label, ".png", sep = ""), plot = pca_plot)
   }
 }
-
-
-
 
 #p63 = TP63; GJA1 = CX43
 # Load required libraries
